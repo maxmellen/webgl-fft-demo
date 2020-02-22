@@ -1,3 +1,10 @@
+interface State {
+  degAngle: number;
+  uniforms: {
+    rotation: WebGLUniformLocation;
+  };
+}
+
 let canvas = document.getElementById("c") as HTMLCanvasElement;
 
 if (!(canvas instanceof HTMLCanvasElement)) {
@@ -35,6 +42,7 @@ async function asyncMain(): Promise<void> {
 
   let program = compileProgram(gl, vert, frag);
   let aPositionLocation = gl.getAttribLocation(program, "a_position");
+  let uRotationLocation = gl.getUniformLocation(program, "u_rotation")!;
   let vertexBuffer = gl.createBuffer();
 
   gl.useProgram(program);
@@ -43,7 +51,12 @@ async function asyncMain(): Promise<void> {
   gl.enableVertexAttribArray(aPositionLocation);
   gl.vertexAttribPointer(aPositionLocation, 2, gl.FLOAT, false, 0, 0);
 
-  window.requestAnimationFrame(drawScene);
+  window.requestAnimationFrame(
+    drawScene({
+      degAngle: 0,
+      uniforms: { rotation: uRotationLocation }
+    })
+  );
 }
 
 async function fetchShaderSources(): Promise<{ vert: string; frag: string }> {
@@ -114,9 +127,23 @@ function compileShader(
   return shader;
 }
 
-function drawScene(): void {
-  gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
+function drawScene(state: State): () => void {
+  let loop = (): void => {
+    let { degAngle, uniforms } = state;
 
-  window.requestAnimationFrame(drawScene);
+    let a = (degAngle * Math.PI) / 180;
+    let s = Math.sin(a);
+    let c = Math.cos(a);
+
+    gl.uniformMatrix2fv(uniforms.rotation, false, Float32Array.of(c, s, -s, c));
+
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    state.degAngle++;
+
+    window.requestAnimationFrame(loop);
+  };
+
+  return loop;
 }
