@@ -1,8 +1,7 @@
-interface State {
+interface State<T extends { uniforms: string }> {
+  mousePosition: { x: number; y: number };
   degAngle: number;
-  uniforms: {
-    rotation: WebGLUniformLocation;
-  };
+  uniforms: { [P in T["uniforms"]]?: WebGLUniformLocation };
 }
 
 let canvas = document.getElementById("c") as HTMLCanvasElement;
@@ -17,9 +16,16 @@ if (!(gl instanceof WebGLRenderingContext)) {
   throw new Error("Could not get WebGL context.");
 }
 
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
+let state: State<{ uniforms: "rotation" | "offset" }> = {
+  mousePosition: { x: 0, y: 0 },
+  degAngle: 0,
+  uniforms: {}
+};
 
+window.addEventListener("resize", resizeCanvas);
+window.addEventListener("mousemove", updateMousePosition);
+
+resizeCanvas();
 asyncMain();
 
 function resizeCanvas(): void {
@@ -34,6 +40,12 @@ function resizeCanvas(): void {
   gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 }
 
+function updateMousePosition(e: MouseEvent): void {
+  let x = (e.clientX / window.innerWidth) * 2.0 - 1;
+  let y = -((e.clientY / window.innerHeight) * 2.0 - 1);
+  state = { ...state, mousePosition: { x, y } };
+}
+
 async function asyncMain(): Promise<void> {
   let [{ vert, frag }, vertices] = await Promise.all([
     fetchShaderSources(),
@@ -42,8 +54,15 @@ async function asyncMain(): Promise<void> {
 
   let program = compileProgram(gl, vert, frag);
   let aPositionLocation = gl.getAttribLocation(program, "a_position");
-  let uRotationLocation = gl.getUniformLocation(program, "u_rotation")!;
   let vertexBuffer = gl.createBuffer();
+
+  state = {
+    ...state,
+    uniforms: {
+      rotation: gl.getUniformLocation(program, "u_rotation")!,
+      offset: gl.getUniformLocation(program, "u_offset")!
+    }
+  };
 
   gl.useProgram(program);
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
@@ -51,12 +70,7 @@ async function asyncMain(): Promise<void> {
   gl.enableVertexAttribArray(aPositionLocation);
   gl.vertexAttribPointer(aPositionLocation, 2, gl.FLOAT, false, 0, 0);
 
-  window.requestAnimationFrame(
-    drawScene({
-      degAngle: 0,
-      uniforms: { rotation: uRotationLocation }
-    })
-  );
+  window.requestAnimationFrame(drawScene);
 }
 
 async function fetchShaderSources(): Promise<{ vert: string; frag: string }> {
@@ -127,23 +141,20 @@ function compileShader(
   return shader;
 }
 
-function drawScene(state: State): () => void {
-  let loop = (): void => {
-    let { degAngle, uniforms } = state;
+function drawScene() {
+  let { degAngle, uniforms: u, mousePosition: mousePos } = state;
 
-    let a = (degAngle * Math.PI) / 180;
-    let s = Math.sin(a);
-    let c = Math.cos(a);
+  let a = (degAngle * Math.PI) / 180;
+  let s = Math.sin(a);
+  let c = Math.cos(a);
 
-    gl.uniformMatrix2fv(uniforms.rotation, false, Float32Array.of(c, s, -s, c));
+  gl.uniformMatrix2fv(u.rotation!, false, Float32Array.of(c, s, -s, c));
+  gl.uniform2f(u.offset!, mousePos.x, mousePos.y);
 
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    state.degAngle++;
+  state = { ...state, degAngle: degAngle + 1 };
 
-    window.requestAnimationFrame(loop);
-  };
-
-  return loop;
+  window.requestAnimationFrame(drawScene);
 }
