@@ -3,5 +3,5 @@
     "strict": true,
     "target": "ESNext"
   },
-  "include": ["main.ts"]
+  "include": ["main.ts", "unknownJson.d.ts"]
 }
