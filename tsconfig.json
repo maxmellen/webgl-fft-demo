@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "strict": true,
-    "target": "ESNext"
+    "target": "ES2017"
   },
-  "include": ["main.ts", "unknownJson.d.ts"]
+  "include": ["main.ts", "globals.d.ts"]
 }

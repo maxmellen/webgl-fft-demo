@@ -1,106 +1,165 @@
-interface State<T extends { uniforms: string }> {
-  mousePosition: { x: number; y: number };
-  degAngle: number;
-  uniforms: { [P in T["uniforms"]]?: WebGLUniformLocation };
+interface DOMElements {
+  container: HTMLDivElement;
+  initPrompt: HTMLParagraphElement;
+  canvas: HTMLCanvasElement;
 }
 
-let canvas = document.getElementById("c") as HTMLCanvasElement;
-
-if (!(canvas instanceof HTMLCanvasElement)) {
-  throw new Error("Could not find canvas.");
+interface InitAudioOptions {
+  fftSize: number;
 }
 
-let gl = canvas.getContext("webgl") as WebGLRenderingContext;
-
-if (!(gl instanceof WebGLRenderingContext)) {
-  throw new Error("Could not get WebGL context.");
+interface AudioServices {
+  getFreqData(): Readonly<Float32Array>;
 }
 
-let state: State<{ uniforms: "rotation" | "offset" }> = {
-  mousePosition: { x: 0, y: 0 },
-  degAngle: 0,
-  uniforms: {}
-};
-
-window.addEventListener("resize", resizeCanvas);
-window.addEventListener("mousemove", updateMousePosition);
-
-resizeCanvas();
-asyncMain();
-
-function resizeCanvas(): void {
-  canvas.width = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
-
-  if (window.devicePixelRatio > 1) {
-    canvas.width *= window.devicePixelRatio;
-    canvas.height *= window.devicePixelRatio;
-  }
-
-  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+interface GraphicsServices {
+  updateVertices(data: Float32Array): void;
+  draw(count: number): void;
 }
 
-function updateMousePosition(e: MouseEvent): void {
-  let x = (e.clientX / window.innerWidth) * 2.0 - 1;
-  let y = -((e.clientY / window.innerHeight) * 2.0 - 1);
-  state = { ...state, mousePosition: { x, y } };
+interface GraphicsUtils {
+  resizeViewportToCanvas(): void;
 }
+
+type DrawSceneDeps = AudioServices & GraphicsServices;
+
+window.addEventListener("click", asyncMain);
 
 async function asyncMain(): Promise<void> {
-  let [{ vert, frag }, vertices] = await Promise.all([
-    fetchShaderSources(),
-    fetchTriangleVertices()
-  ]);
+  window.removeEventListener("click", asyncMain);
+
+  let domElements = getDomElements();
+  let { canvas } = domElements;
+  let { getFreqData } = await initAudio({ fftSize: 512 });
+  let graphicsServicesAndUtils = await initGraphics(canvas);
+  let { updateVertices, draw } = graphicsServicesAndUtils;
+  let { resizeViewportToCanvas } = graphicsServicesAndUtils;
+
+  hideInitPrompt(domElements);
+  autoResizeCanvas(canvas, { resizeViewportToCanvas });
+  setupDrawLoop({ getFreqData, updateVertices, draw });
+}
+
+function getDomElements(): DOMElements {
+  let container = document.getElementById("container");
+  let initPrompt = document.getElementById("init-prompt");
+  let canvas = document.getElementById("c");
+
+  if (!(container instanceof HTMLDivElement)) {
+    throw new Error("Could not find container.");
+  }
+
+  if (!(initPrompt instanceof HTMLParagraphElement)) {
+    throw new Error("Could not find init prompt.");
+  }
+
+  if (!(canvas instanceof HTMLCanvasElement)) {
+    throw new Error("Could not find canvas.");
+  }
+
+  return { container, initPrompt, canvas };
+}
+
+function hideInitPrompt(domElements: DOMElements): void {
+  let { container, initPrompt } = domElements;
+  container.style.cursor = "unset";
+  initPrompt.style.display = "none";
+}
+
+function autoResizeCanvas(
+  canvas: HTMLCanvasElement,
+  { resizeViewportToCanvas }: GraphicsUtils
+): void {
+  let resizeCanvas = () => {
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+
+    if (window.devicePixelRatio > 1) {
+      canvas.width *= window.devicePixelRatio;
+      canvas.height *= window.devicePixelRatio;
+    }
+
+    resizeViewportToCanvas();
+  };
+
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+}
+
+async function initAudio(opts: InitAudioOptions): Promise<AudioServices> {
+  let AudioContext = window.AudioContext || window.webkitAudioContext;
+  let ctx = new AudioContext();
+  let userAudio = await navigator.mediaDevices.getUserMedia({ audio: true });
+  let audioSource = ctx.createMediaStreamSource(userAudio);
+  let analyser = ctx.createAnalyser();
+  let freqData = new Float32Array(opts.fftSize);
+  let { minDecibels, maxDecibels } = analyser;
+  let deltaDecibels = maxDecibels - minDecibels;
+
+  analyser.fftSize = opts.fftSize;
+  audioSource.connect(analyser);
+
+  if (ctx.state !== "running") {
+    await ctx.resume();
+  }
+
+  function getFreqData(): Readonly<Float32Array> {
+    analyser.getFloatFrequencyData(freqData);
+
+    for (let i = 0; i < freqData.length; i++) {
+      freqData[i] = freqData[i]
+        ? (freqData[i] - minDecibels) / deltaDecibels
+        : 0;
+    }
+
+    return freqData;
+  }
+
+  return { getFreqData };
+}
+
+async function initGraphics(
+  canvas: HTMLCanvasElement
+): Promise<GraphicsServices & GraphicsUtils> {
+  let gl = canvas.getContext("webgl");
+
+  if (!gl) {
+    throw new Error("Could not create WebGL context.");
+  }
+
+  let { vert, frag } = await fetchShaderSources();
 
   let program = compileProgram(gl, vert, frag);
   let aPositionLocation = gl.getAttribLocation(program, "a_position");
   let vertexBuffer = gl.createBuffer();
 
-  state = {
-    ...state,
-    uniforms: {
-      rotation: gl.getUniformLocation(program, "u_rotation")!,
-      offset: gl.getUniformLocation(program, "u_offset")!
-    }
-  };
-
   gl.useProgram(program);
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(aPositionLocation);
   gl.vertexAttribPointer(aPositionLocation, 2, gl.FLOAT, false, 0, 0);
 
-  window.requestAnimationFrame(drawScene);
+  return {
+    updateVertices(data: Float32Array): void {
+      gl!.bufferData(gl!.ARRAY_BUFFER, data, gl!.DYNAMIC_DRAW);
+    },
+    draw(count: number): void {
+      gl!.clear(gl!.COLOR_BUFFER_BIT);
+      gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, count);
+    },
+    resizeViewportToCanvas(): void {
+      gl!.viewport(0, 0, gl!.canvas.width, gl!.canvas.height);
+    }
+  };
 }
 
 async function fetchShaderSources(): Promise<{ vert: string; frag: string }> {
   let [vert, frag] = await Promise.all(
-    ["./triangle.vert", "./triangle.frag"].map(path =>
+    ["./fft.vert", "./fft.frag"].map(path =>
       fetch(path).then(resp => resp.text())
     )
   );
 
   return { vert, frag };
-}
-
-async function fetchTriangleVertices(): Promise<Float32Array> {
-  return fetch("./triangle.json")
-    .then(resp => resp.json())
-    .then(doc => {
-      if (!isValidTriangleVerticesDoc(doc)) throw new Error("Invalid format.");
-      return Float32Array.from(doc.points.flat());
-    });
-}
-
-function isValidTriangleVerticesDoc(
-  doc: unknown
-): doc is { points: number[][] } {
-  if (typeof doc !== "object" || !doc) return false;
-  if (!Array.isArray((doc as any).points)) return false;
-  return ((doc as any).points as unknown[]).every(vertex => {
-    if (!Array.isArray(vertex)) return false;
-    return vertex.every(component => typeof component === "number");
-  });
 }
 
 function compileProgram(
@@ -141,20 +200,31 @@ function compileShader(
   return shader;
 }
 
-function drawScene() {
-  let { degAngle, uniforms: u, mousePosition: mousePos } = state;
+function setupDrawLoop(deps: DrawSceneDeps): void {
+  let { getFreqData, updateVertices, draw } = deps;
+  let vertices: Float32Array | undefined;
 
-  let a = (degAngle * Math.PI) / 180;
-  let s = Math.sin(a);
-  let c = Math.cos(a);
+  function drawScene(): void {
+    let freqData = getFreqData();
+    let effectiveFreqDataLen = freqData.length / 2;
+    vertices = vertices ?? new Float32Array(freqData.length * 4);
 
-  gl.uniformMatrix2fv(u.rotation!, false, Float32Array.of(c, s, -s, c));
-  gl.uniform2f(u.offset!, mousePos.x, mousePos.y);
+    for (let i = 0; i < effectiveFreqDataLen; i++) {
+      let j = i * 4;
+      let x = i / effectiveFreqDataLen;
+      vertices[j] = x;
+      vertices[j + 1] = freqData[i];
+      vertices[j + 2] = x;
+      vertices[j + 3] = 0;
+    }
 
-  gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
+    updateVertices(vertices);
+    draw(vertices.length / 2);
 
-  state = { ...state, degAngle: degAngle + 1 };
+    window.requestAnimationFrame(drawScene);
+  }
 
   window.requestAnimationFrame(drawScene);
 }
+
+export {};
