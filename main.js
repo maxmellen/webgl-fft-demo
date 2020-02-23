@@ -4,8 +4,11 @@ async function asyncMain() {
     if (!(canvas instanceof HTMLCanvasElement)) {
         throw new Error("Could not find canvas.");
     }
-    let { getFreqData } = await initAudio({ fftSize: 512 });
-    let graphicsServicesAndUtils = await initGraphics(canvas);
+    let [audioServices, graphicsServicesAndUtils] = await Promise.all([
+        initAudio({ fftSize: 512 }),
+        initGraphics(canvas)
+    ]);
+    let { getFreqData } = audioServices;
     let { updateVertices, draw } = graphicsServicesAndUtils;
     let { resizeViewportToCanvas } = graphicsServicesAndUtils;
     autoResizeCanvas(canvas, { resizeViewportToCanvas });
