@@ -68,10 +68,6 @@ async function initAudio(opts: InitAudioOptions): Promise<AudioServices> {
   analyser.fftSize = opts.fftSize;
   audioSource.connect(analyser);
 
-  if (ctx.state !== "running") {
-    await ctx.resume();
-  }
-
   function getFreqData(): Readonly<Float32Array> {
     analyser.getFloatFrequencyData(freqData);
 

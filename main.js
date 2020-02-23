@@ -35,9 +35,6 @@ async function initAudio(opts) {
     let deltaDecibels = maxDecibels - minDecibels;
     analyser.fftSize = opts.fftSize;
     audioSource.connect(analyser);
-    if (ctx.state !== "running") {
-        await ctx.resume();
-    }
     function getFreqData() {
         analyser.getFloatFrequencyData(freqData);
         for (let i = 0; i < freqData.length; i++) {
