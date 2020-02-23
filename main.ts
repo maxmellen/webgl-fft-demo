@@ -1,9 +1,3 @@
-interface DOMElements {
-  container: HTMLDivElement;
-  initPrompt: HTMLParagraphElement;
-  canvas: HTMLCanvasElement;
-}
-
 interface InitAudioOptions {
   fftSize: number;
 }
@@ -23,47 +17,22 @@ interface GraphicsUtils {
 
 type DrawSceneDeps = AudioServices & GraphicsServices;
 
-window.addEventListener("click", asyncMain);
+asyncMain();
 
 async function asyncMain(): Promise<void> {
-  window.removeEventListener("click", asyncMain);
-
-  let domElements = getDomElements();
-  let { canvas } = domElements;
-  let { getFreqData } = await initAudio({ fftSize: 512 });
-  let graphicsServicesAndUtils = await initGraphics(canvas);
-  let { updateVertices, draw } = graphicsServicesAndUtils;
-  let { resizeViewportToCanvas } = graphicsServicesAndUtils;
-
-  hideInitPrompt(domElements);
-  autoResizeCanvas(canvas, { resizeViewportToCanvas });
-  setupDrawLoop({ getFreqData, updateVertices, draw });
-}
-
-function getDomElements(): DOMElements {
-  let container = document.getElementById("container");
-  let initPrompt = document.getElementById("init-prompt");
   let canvas = document.getElementById("c");
-
-  if (!(container instanceof HTMLDivElement)) {
-    throw new Error("Could not find container.");
-  }
-
-  if (!(initPrompt instanceof HTMLParagraphElement)) {
-    throw new Error("Could not find init prompt.");
-  }
 
   if (!(canvas instanceof HTMLCanvasElement)) {
     throw new Error("Could not find canvas.");
   }
 
-  return { container, initPrompt, canvas };
-}
+  let { getFreqData } = await initAudio({ fftSize: 512 });
+  let graphicsServicesAndUtils = await initGraphics(canvas);
+  let { updateVertices, draw } = graphicsServicesAndUtils;
+  let { resizeViewportToCanvas } = graphicsServicesAndUtils;
 
-function hideInitPrompt(domElements: DOMElements): void {
-  let { container, initPrompt } = domElements;
-  container.style.cursor = "unset";
-  initPrompt.style.display = "none";
+  autoResizeCanvas(canvas, { resizeViewportToCanvas });
+  setupDrawLoop({ getFreqData, updateVertices, draw });
 }
 
 function autoResizeCanvas(
