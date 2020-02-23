@@ -56,9 +56,8 @@ function autoResizeCanvas(
 }
 
 async function initAudio(opts: InitAudioOptions): Promise<AudioServices> {
-  let AudioContext = window.AudioContext || window.webkitAudioContext;
-  let ctx = new AudioContext();
   let userAudio = await navigator.mediaDevices.getUserMedia({ audio: true });
+  let ctx = new (window.AudioContext || window.webkitAudioContext)();
   let audioSource = ctx.createMediaStreamSource(userAudio);
   let analyser = ctx.createAnalyser();
   let freqData = new Float32Array(opts.fftSize);

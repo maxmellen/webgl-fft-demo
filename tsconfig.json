@@ -3,5 +3,5 @@
     "strict": true,
     "target": "ES2017"
   },
-  "include": ["main.ts", "globals.d.ts"]
+  "include": ["main.ts", "global.d.ts"]
 }
