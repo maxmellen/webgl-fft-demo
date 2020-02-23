@@ -7,8 +7,8 @@ interface AudioServices {
 }
 
 interface GraphicsServices {
-  updateVertices(data: Float32Array): void;
-  draw(count: number): void;
+  setVerticesBufferData(data: Float32Array): void;
+  drawVertices(count: number): void;
 }
 
 interface GraphicsUtils {
@@ -31,32 +31,8 @@ async function asyncMain(): Promise<void> {
     initGraphics(canvas)
   ]);
 
-  let { getFreqData } = audioServices;
-  let { updateVertices, draw } = graphicsServicesAndUtils;
-  let { resizeViewportToCanvas } = graphicsServicesAndUtils;
-
-  autoResizeCanvas(canvas, { resizeViewportToCanvas });
-  setupDrawLoop({ getFreqData, updateVertices, draw });
-}
-
-function autoResizeCanvas(
-  canvas: HTMLCanvasElement,
-  { resizeViewportToCanvas }: GraphicsUtils
-): void {
-  let resizeCanvas = () => {
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
-
-    if (window.devicePixelRatio > 1) {
-      canvas.width *= window.devicePixelRatio;
-      canvas.height *= window.devicePixelRatio;
-    }
-
-    resizeViewportToCanvas();
-  };
-
-  window.addEventListener("resize", resizeCanvas);
-  resizeCanvas();
+  autoResizeCanvas(canvas, graphicsServicesAndUtils);
+  setupDrawLoop({ ...audioServices, ...graphicsServicesAndUtils });
 }
 
 async function initAudio(opts: InitAudioOptions): Promise<AudioServices> {
@@ -107,10 +83,10 @@ async function initGraphics(
   gl.vertexAttribPointer(aPositionLocation, 2, gl.FLOAT, false, 0, 0);
 
   return {
-    updateVertices(data: Float32Array): void {
+    setVerticesBufferData(data: Float32Array): void {
       gl!.bufferData(gl!.ARRAY_BUFFER, data, gl!.DYNAMIC_DRAW);
     },
-    draw(count: number): void {
+    drawVertices(count: number): void {
       gl!.clear(gl!.COLOR_BUFFER_BIT);
       gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, count);
     },
@@ -168,31 +144,60 @@ function compileShader(
   return shader;
 }
 
-function setupDrawLoop(deps: DrawSceneDeps): void {
-  let { getFreqData, updateVertices, draw } = deps;
-  let vertices: Float32Array | undefined;
+function autoResizeCanvas(
+  canvas: HTMLCanvasElement,
+  { resizeViewportToCanvas }: GraphicsUtils
+): void {
+  let resizeCanvas = (): void => {
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
 
-  function drawScene(): void {
-    let freqData = getFreqData();
-    let effectiveFreqDataLen = freqData.length / 2;
-    vertices = vertices ?? new Float32Array(freqData.length * 4);
-
-    for (let i = 0; i < effectiveFreqDataLen; i++) {
-      let j = i * 4;
-      let x = i / effectiveFreqDataLen;
-      vertices[j] = x;
-      vertices[j + 1] = freqData[i];
-      vertices[j + 2] = x;
-      vertices[j + 3] = 0;
+    if (window.devicePixelRatio > 1) {
+      canvas.width *= window.devicePixelRatio;
+      canvas.height *= window.devicePixelRatio;
     }
 
-    updateVertices(vertices);
-    draw(vertices.length / 2);
+    resizeViewportToCanvas();
+  };
 
-    window.requestAnimationFrame(drawScene);
+  window.addEventListener("resize", resizeCanvas);
+  window.setTimeout(resizeCanvas);
+}
+
+function setupDrawLoop(deps: DrawSceneDeps): void {
+  let { getFreqData, setVerticesBufferData, drawVertices } = deps;
+  let vertices: Float32Array | undefined;
+
+  function drawLoop(): void {
+    let freqData = getFreqData();
+    vertices = updateVertices(vertices, freqData);
+    setVerticesBufferData(vertices);
+    drawVertices(vertices.length / 2);
+    window.requestAnimationFrame(drawLoop);
   }
 
-  window.requestAnimationFrame(drawScene);
+  window.requestAnimationFrame(drawLoop);
+}
+
+function updateVertices(
+  vertices: Float32Array | undefined,
+  freqData: Readonly<Float32Array>
+): Float32Array {
+  vertices = vertices ?? new Float32Array(freqData.length * 4);
+
+  // Seems the second half of the data is always 0 ¯\_(ツ)_/¯
+  let effectiveFreqDataLen = freqData.length / 2;
+
+  for (let i = 0; i < effectiveFreqDataLen; i++) {
+    let j = i * 4;
+    let x = i / effectiveFreqDataLen;
+    vertices[j] = x;
+    vertices[j + 1] = freqData[i];
+    vertices[j + 2] = x;
+    vertices[j + 3] = 0;
+  }
+
+  return vertices;
 }
 
 export {};
