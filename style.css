@@ -1,39 +1,3 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 }
-
-#file-drop-container {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-
-  cursor: pointer;
-}
-
-#file-drop-prompt {
-  font-size: 18pt;
-}
-
-#file-input {
-  display: none;
-}
-
-#c {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  width: 100%;
-  height: 100%;
-}

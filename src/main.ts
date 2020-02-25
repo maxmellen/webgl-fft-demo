@@ -1,39 +1,58 @@
-import { waitForFileData } from "./filePrompt.js";
-import { init as initAudio, Utils as AudioUtils } from "./audio.js";
-import { init as initGraphics, Utils as GraphicsUtils } from "./graphics.js";
-
-asyncMain();
-
-async function asyncMain(): Promise<void> {
-  let audioData = await waitForFileData();
-  let audioUtils = await initAudio({ audioData, fftSize: 2048 });
-  let graphicsUtils = initGraphics();
-  setupDrawLoop({ ...audioUtils, ...graphicsUtils });
+declare global {
+  var webkitAudioContext: typeof AudioContext;
 }
 
-function setupDrawLoop(utils: AudioUtils & GraphicsUtils): void {
-  let { getFrequencyData, drawVertices } = utils;
-  let positions: Float32Array | undefined;
+let audioData: ArrayBuffer;
+let audioCtx: AudioContext;
+let audioSource: AudioBufferSourceNode;
+let fileInput = q(HTMLInputElement, "#file-input");
+let playButton = q(HTMLButtonElement, "#play-button");
+let fileReader = new FileReader();
 
-  function updateVertices() {
-    let frequencyData = getFrequencyData();
-    positions = positions ?? new Float32Array(frequencyData.length * 4);
+fileInput.addEventListener("change", () => {
+  let file = fileInput.files?.[0];
+  if (!file) return;
+  fileReader.readAsArrayBuffer(file);
+});
 
-    for (let i = 0; i < frequencyData.length; i++) {
-      let j = i * 4;
-      let x = i / frequencyData.length;
-      positions[j] = x;
-      positions[j + 1] = frequencyData[i];
-      positions[j + 2] = x;
-      positions[j + 3] = 0;
-    }
-  }
+fileReader.addEventListener("load", e => {
+  audioData = fileReader.result as ArrayBuffer;
+  playButton.disabled = false;
+});
 
-  function drawLoop(): void {
-    updateVertices();
-    drawVertices(positions!);
-    window.requestAnimationFrame(drawLoop);
-  }
+fileReader.addEventListener("error", () => {
+  console.error("Could not read file:", fileReader.error!);
+});
 
-  window.requestAnimationFrame(drawLoop);
+playButton.addEventListener("click", () => {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioSource = audioCtx.createBufferSource();
+  audioCtx.decodeAudioData(
+    audioData!,
+    decodeSuccessCallback,
+    decodeErrorCallback
+  );
+});
+
+function decodeSuccessCallback(buffer: AudioBuffer) {
+  audioSource.buffer = buffer;
+  audioSource.connect(audioCtx.destination);
+  audioSource.start();
 }
+
+function decodeErrorCallback(error: any) {
+  console.error("Could not decode audio:", error);
+}
+
+function q<T extends HTMLElement>(
+  constructor: { new (): T },
+  selector: string
+): T {
+  let element = document.querySelector(selector);
+  if (!(element instanceof constructor)) {
+    throw new Error(`${constructor.name} "${selector}" not found.`);
+  }
+  return element;
+}
+
+export {};
