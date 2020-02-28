@@ -8,7 +8,14 @@
     <script type="module" src="./dist/main.js"></script>
   </head>
   <body>
-    <p><input id="file-input" type="file" /></p>
-    <canvas id="c"></canvas>
+    <div id="container">
+      <h1>WebGL FFT Demo</h1>
+      <p>
+        This webpage demonstrates how to get the FFT of an audio source and
+        visualize it by feeding it to a WebGL canvas as a texture.
+      </p>
+      <p><button id="init-audio-button" disabled>Initialize audio</button></p>
+      <canvas id="c"></canvas>
+    </div>
   </body>
 </html>
